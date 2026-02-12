@@ -1,139 +1,95 @@
 <!DOCTYPE html>
 <html lang="tr">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Smart App Pro</title>
-    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-    <style>
-        :root { --red: #e50914; --dark: #0a0a0a; }
-        body { margin: 0; background: var(--dark); color: white; font-family: sans-serif; }
-        .page { display: none; padding: 15px; }
-        .active { display: block; }
-        .header { text-align: center; padding: 20px; color: var(--red); }
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
-        .box { height: 100px; background: #1a1a1a; border-radius: 15px; display: flex; align-items: center; justify-content: center; border: 1px solid #333; cursor: pointer; font-weight: bold; text-align: center; }
-        .box-large { grid-column: span 2; background: linear-gradient(45deg, #440a0a, var(--red)); }
-        .list-item { padding: 15px; background: #151515; margin-bottom: 8px; border-radius: 8px; border-left: 4px solid var(--red); cursor: pointer; }
-        input { width: 100%; padding: 12px; margin: 10px 0; border-radius: 8px; border: none; background: #222; color: white; box-sizing: border-box; }
-        video { width: 100%; aspect-ratio: 16/9; background: #000; position: sticky; top: 0; }
-        .back-btn { background: #333; padding: 10px 20px; border-radius: 20px; display: inline-block; margin: 10px 0; cursor: pointer; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IPTV Smart Player</title>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+<style>
+body{margin:0;background:#0a0a0a;color:#fff;font-family:Arial}
+header{padding:15px;text-align:center;font-size:22px;color:#e50914}
+#search{width:100%;padding:12px;border:none;background:#1a1a1a;color:#fff}
+.list{padding:10px}
+.item{padding:12px;margin-bottom:8px;background:#151515;border-left:4px solid #e50914;cursor:pointer;border-radius:6px}
+.item:hover{background:#222}
+video{width:100%;aspect-ratio:16/9;background:#000;position:sticky;top:0}
+.loading{text-align:center;padding:20px}
+</style>
 </head>
 <body>
 
-<div id="home" class="page active">
-    <div class="header"><h1>SMART APP</h1><p>Giriş: 10 Şubat 2026</p></div>
-    <div class="grid">
-        <div class="box box-large" onclick="loadType('Canlı')">📺 CANLI YAYIN</div>
-        <div class="box" onclick="loadType('Film')">🎬 FİLMLER</div>
-        <div class="box" onclick="loadType('Dizi')">🎭 DİZİLER</div>
-        <div class="box" onclick="showPage('settings')">⚙️ AYARLAR</div>
-        <div class="box" onclick="location.reload()">🔄 YENİLE</div>
-    </div>
-</div>
+<header>SMART IPTV PLAYER</header>
 
-<div id="list" class="page">
-    <div class="back-btn" onclick="showPage('home')">⬅ Geri</div>
-    <h2 id="title">Kanallar</h2>
-    <input type="text" placeholder="Ara..." onkeyup="filter(this.value)">
-    <div id="content">Yükleniyor...</div>
-</div>
+<video id="video" controls autoplay></video>
 
-<div id="player" class="page">
-    <video id="vid" controls autoplay></video>
-    <div class="back-btn" onclick="showPage('list')" style="margin-top:20px">⬅ Listeye Dön</div>
-    <h3 id="playing">Kanal Adı</h3>
-</div>
+<input id="search" placeholder="Kanal Ara..." onkeyup="filterList(this.value)">
 
-<div id="settings" class="page">
-    <div class="back-btn" onclick="showPage('home')">⬅ Geri</div>
-    <h2>Ayarlar</h2>
-    <input type="text" id="m3uInput" value="http://12345.nobannedle.one:80/get.php?username=haticeferhat709781552&password=hpmk32549j&type=m3u_plus&output=ts">
-    <button onclick="saveSettings()" style="width:100%; padding:15px; background:var(--red); color:white; border:none; border-radius:8px;">KAYDET VE YÜKLE</button>
+<div class="list" id="list">
+<div class="loading">Liste yükleniyor...</div>
 </div>
 
 <script>
-    let currentData = [];
-    let hls = null;
+const m3uUrl = "http://kingplayer.one:80/get.php?username=XXX&password=YYY&type=m3u&output=m3u8";
+const proxy = "https://api.allorigins.win/raw?url=";
+let channels = [];
+let hls;
 
-    function showPage(id) {
-        document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-        document.getElementById(id).classList.add('active');
-        if(id !== 'player' && hls) { document.getElementById('vid').pause(); }
+async function loadM3U() {
+    try {
+        const res = await fetch(proxy + encodeURIComponent(m3uUrl));
+        const text = await res.text();
+        parseM3U(text);
+    } catch(e) {
+        document.getElementById("list").innerHTML = "Liste yüklenemedi (CORS veya HTTP engeli).";
     }
+}
 
-    async function fetchData() {
-        const m3uUrl = document.getElementById('m3uInput').value;
-        const proxy = "https://api.allorigins.win/raw?url=";
-        document.getElementById('content').innerHTML = "Liste indiriliyor, lütfen bekleyin...";
-        
-        try {
-            const response = await fetch(proxy + encodeURIComponent(m3uUrl));
-            const text = await response.text();
-            parse(text);
-        } catch (e) {
-            document.getElementById('content').innerHTML = "Hata! Linke ulaşılamadı.";
-        }
-    }
-
-    function parse(data) {
-        currentData = [];
-        const lines = data.split('\n');
-        for (let i = 0; i < lines.length; i++) {
-            if (lines[i].includes('#EXTINF:')) {
-                const name = lines[i].split(',')[1] || "Kanal";
-                const url = lines[i+1]?.trim();
-                if(url && url.startsWith('http')) {
-                    let type = "Canlı";
-                    if(lines[i].toLowerCase().includes('movie')) type = "Film";
-                    if(lines[i].toLowerCase().includes('series')) type = "Dizi";
-                    currentData.push({ name, url, type });
-                }
+function parseM3U(data){
+    channels = [];
+    const lines = data.split("\n");
+    for(let i=0;i<lines.length;i++){
+        if(lines[i].startsWith("#EXTINF")){
+            const name = lines[i].split(",")[1] || "Kanal";
+            const url = lines[i+1]?.trim();
+            if(url && url.startsWith("http")){
+                channels.push({name,url});
             }
         }
-        document.getElementById('content').innerHTML = "Yüklendi! Kategori seçin.";
     }
+    renderList(channels);
+}
 
-    function loadType(type) {
-        showPage('list');
-        document.getElementById('title').innerText = type;
-        const container = document.getElementById('content');
-        container.innerHTML = '';
-        const filtered = currentData.filter(x => x.type === type);
-        filtered.forEach(item => {
-            const div = document.createElement('div');
-            div.className = 'list-item';
-            div.innerText = item.name;
-            div.onclick = () => playVideo(item.url, item.name);
-            container.appendChild(div);
-        });
+function renderList(data){
+    const list = document.getElementById("list");
+    list.innerHTML = "";
+    data.forEach(ch=>{
+        const div = document.createElement("div");
+        div.className="item";
+        div.innerText=ch.name;
+        div.onclick=()=>play(ch.url);
+        list.appendChild(div);
+    });
+}
+
+function play(url){
+    const video = document.getElementById("video");
+    if(Hls.isSupported()){
+        if(hls) hls.destroy();
+        hls = new Hls();
+        hls.loadSource(url);
+        hls.attachMedia(video);
+    }else{
+        video.src = url;
     }
+}
 
-    function playVideo(url, name) {
-        showPage('player');
-        document.getElementById('playing').innerText = name;
-        const video = document.getElementById('vid');
-        
-        if (Hls.isSupported()) {
-            if (hls) hls.destroy();
-            hls = new Hls();
-            hls.loadSource(url);
-            hls.attachMedia(video);
-            hls.on(Hls.Events.MANIFEST_PARSED, () => video.play());
-        } else {
-            video.src = url;
-        }
-    }
+function filterList(val){
+    const filtered = channels.filter(c=>c.name.toLowerCase().includes(val.toLowerCase()));
+    renderList(filtered);
+}
 
-    function saveSettings() { fetchData(); showPage('home'); }
-    function filter(v) {
-        document.querySelectorAll('.list-item').forEach(i => {
-            i.style.display = i.innerText.toLowerCase().includes(v.toLowerCase()) ? 'block' : 'none';
-        });
-    }
-
-    fetchData();
+loadM3U();
 </script>
+
 </body>
 </html>
